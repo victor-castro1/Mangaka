@@ -1,0 +1,690 @@
+From 13db387d19599d0158e76f62e0f9729ff4cc0ca5 Mon Sep 17 00:00:00 2001
+From: victor-castro1 <victor@example.com>
+Date: Sat, 13 Jun 2026 13:31:13 +0000
+Subject: [PATCH] Detalhes, favoritos e fallback de capa por editora
+
+- components/StarRating: avaliacao em estrelas
+- components/FavoriteButton: botao de favoritar com persistencia em localStorage
+- app/hq/[id]: pagina de detalhes da HQ
+- app/favoritos: pagina com as HQs favoritadas
+- lib/favoritos: helper de leitura/escrita do localStorage
+- lib/editoras: icone/cor de fallback quando a capa nao vem da Google Books API
+- HQCard e catalogo ajustados para usar o fallback de capa e o favoritos persistido
+---
+ app/catalogo/page.js                          |  11 +-
+ app/favoritos/favoritos.module.css            |  39 ++++++
+ app/favoritos/page.js                         |  66 +++++++++++
+ app/hq/[id]/hq.module.css                     | 111 ++++++++++++++++++
+ app/hq/[id]/page.js                           | 108 +++++++++++++++++
+ components/FavoriteButton/FavoriteButton.js   |  40 +++++++
+ .../FavoriteButton/FavoriteButton.module.css  |  28 +++++
+ components/HQCard/HQCard.js                   |  17 ++-
+ components/HQCard/HQCard.module.css           |  12 ++
+ components/StarRating/StarRating.js           |  23 ++++
+ components/StarRating/StarRating.module.css   |  20 ++++
+ lib/editoras.js                               |  25 ++++
+ lib/favoritos.js                              |  28 +++++
+ 13 files changed, 524 insertions(+), 4 deletions(-)
+ create mode 100644 app/favoritos/favoritos.module.css
+ create mode 100644 app/favoritos/page.js
+ create mode 100644 app/hq/[id]/hq.module.css
+ create mode 100644 app/hq/[id]/page.js
+ create mode 100644 components/FavoriteButton/FavoriteButton.js
+ create mode 100644 components/FavoriteButton/FavoriteButton.module.css
+ create mode 100644 components/StarRating/StarRating.js
+ create mode 100644 components/StarRating/StarRating.module.css
+ create mode 100644 lib/editoras.js
+ create mode 100644 lib/favoritos.js
+
+diff --git a/app/catalogo/page.js b/app/catalogo/page.js
+index d5a6c75..699d664 100644
+--- a/app/catalogo/page.js
++++ b/app/catalogo/page.js
+@@ -5,6 +5,7 @@ import SearchBar from "../../components/SearchBar/SearchBar"
+ import FilterBar from "../../components/FilterBar/FilterBar"
+ import HQCard from "../../components/HQCard/HQCard"
+ import { buscarHQsPorEditora } from "../../lib/api"
++import { getFavoritos, toggleFavorito } from "../../lib/favoritos"
+ import styles from "./catalogo.module.css"
+ 
+ export default function Catalogo() {
+@@ -14,6 +15,11 @@ export default function Catalogo() {
+     const [favoritos, setFavoritos] = useState([])
+     const [carregando, setCarregando] = useState(true)
+ 
++    // Carrega os favoritos salvos no navegador (sincroniza com a página /favoritos)
++    useEffect(() => {
++        setFavoritos(getFavoritos())
++    }, [])
++
+     useEffect(() => {
+         async function carregarHQs() {
+             setCarregando(true)
+@@ -29,9 +35,8 @@ export default function Catalogo() {
+     }, [filtroAtivo])
+ 
+     function handleFavoritar(id) {
+-        setFavoritos((prev) =>
+-            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+-        )
++        const novosFavoritos = toggleFavorito(id)
++        setFavoritos(novosFavoritos)
+     }
+ 
+     const hqsFiltradas = hqs.filter((hq) =>
+diff --git a/app/favoritos/favoritos.module.css b/app/favoritos/favoritos.module.css
+new file mode 100644
+index 0000000..87ebe48
+--- /dev/null
++++ b/app/favoritos/favoritos.module.css
+@@ -0,0 +1,39 @@
++.main {
++  padding: 32px;
++}
++
++.title {
++  font-size: 28px;
++  font-weight: bold;
++  margin-bottom: 24px;
++}
++
++.status {
++  color: #aaaaaa;
++  font-size: 16px;
++  text-align: center;
++  padding: 48px 0;
++}
++
++.link {
++  color: var(--color-favorite);
++  text-decoration: underline;
++}
++
++.grid {
++  display: grid;
++  grid-template-columns: repeat(4, 1fr);
++  gap: 16px;
++}
++
++@media (max-width: 1024px) {
++  .grid {
++    grid-template-columns: repeat(2, 1fr);
++  }
++}
++
++@media (max-width: 600px) {
++  .grid {
++    grid-template-columns: 1fr;
++  }
++}
+diff --git a/app/favoritos/page.js b/app/favoritos/page.js
+new file mode 100644
+index 0000000..9dbdd69
+--- /dev/null
++++ b/app/favoritos/page.js
+@@ -0,0 +1,66 @@
++"use client"
++
++import { useEffect, useState } from "react"
++import HQCard from "../../components/HQCard/HQCard"
++import { buscarHQPorId } from "../../lib/api"
++import { getFavoritos, toggleFavorito } from "../../lib/favoritos"
++import styles from "./favoritos.module.css"
++
++export default function Favoritos() {
++  const [hqs, setHqs] = useState([])
++  const [carregando, setCarregando] = useState(true)
++
++  useEffect(() => {
++    async function carregarFavoritos() {
++      setCarregando(true)
++
++      const ids = getFavoritos()
++
++      // Busca cada HQ favoritada na Google Books API. Se alguma tiver sido
++      // removida/renomeada lá e a Promise falhar, simplesmente ignoramos ela
++      // em vez de derrubar a página inteira.
++      const resultados = await Promise.all(
++        ids.map((id) =>
++          buscarHQPorId(id).catch(() => null)
++        )
++      )
++
++      setHqs(resultados.filter(Boolean))
++      setCarregando(false)
++    }
++
++    carregarFavoritos()
++  }, [])
++
++  function handleRemoverFavorito(id) {
++    toggleFavorito(id)
++    setHqs((prev) => prev.filter((hq) => hq.id !== id))
++  }
++
++  return (
++    <main className={styles.main}>
++      <h1 className={styles.title}>Meus Favoritos</h1>
++
++      {carregando ? (
++        <p className={styles.status}>Carregando...</p>
++      ) : hqs.length === 0 ? (
++        <p className={styles.status}>
++          Você ainda não favoritou nenhuma HQ. Vá até o{" "}
++          <a href="/catalogo" className={styles.link}>catálogo</a> e clique no
++          coraçãozinho das HQs que você gostar.
++        </p>
++      ) : (
++        <div className={styles.grid}>
++          {hqs.map((hq) => (
++            <HQCard
++              key={hq.id}
++              {...hq}
++              isFavorito={true}
++              onFavoritar={handleRemoverFavorito}
++            />
++          ))}
++        </div>
++      )}
++    </main>
++  )
++}
+diff --git a/app/hq/[id]/hq.module.css b/app/hq/[id]/hq.module.css
+new file mode 100644
+index 0000000..737f1aa
+--- /dev/null
++++ b/app/hq/[id]/hq.module.css
+@@ -0,0 +1,111 @@
++.main {
++  padding: 32px;
++  max-width: 960px;
++  margin: 0 auto;
++}
++
++.voltar {
++  display: inline-block;
++  color: #aaaaaa;
++  text-decoration: none;
++  font-size: 14px;
++  margin-bottom: 24px;
++}
++
++.voltar:hover {
++  color: #ffffff;
++}
++
++.status {
++  color: #aaaaaa;
++  font-size: 16px;
++  text-align: center;
++  padding: 48px 0;
++}
++
++.conteudo {
++  display: flex;
++  gap: 32px;
++}
++
++.capaWrapper {
++  flex: 0 0 280px;
++  aspect-ratio: 3 / 4;
++  border-radius: 12px;
++  overflow: hidden;
++  background-color: #000000;
++}
++
++.capa {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++}
++
++.capaFallback {
++  width: 100%;
++  height: 100%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.iconeFallback {
++  font-size: 72px;
++}
++
++.info {
++  flex: 1;
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++}
++
++.badge {
++  align-self: flex-start;
++  padding: 4px 10px;
++  border-radius: 6px;
++  font-size: 12px;
++  font-weight: bold;
++  color: #ffffff;
++}
++
++.titulo {
++  font-size: 28px;
++  font-weight: bold;
++}
++
++.ano {
++  color: #aaaaaa;
++  font-size: 14px;
++}
++
++.sinopse {
++  color: #cccccc;
++  font-size: 15px;
++  line-height: 1.6;
++}
++
++.acoes {
++  display: flex;
++  align-items: center;
++  gap: 16px;
++  margin-top: auto;
++}
++
++.preco {
++  font-size: 22px;
++  font-weight: bold;
++}
++
++@media (max-width: 700px) {
++  .conteudo {
++    flex-direction: column;
++  }
++
++  .capaWrapper {
++    flex: none;
++    width: 100%;
++    max-width: 280px;
++  }
++}
+diff --git a/app/hq/[id]/page.js b/app/hq/[id]/page.js
+new file mode 100644
+index 0000000..994897a
+--- /dev/null
++++ b/app/hq/[id]/page.js
+@@ -0,0 +1,108 @@
++"use client"
++
++import { useEffect, useState } from "react"
++import Link from "next/link"
++import { useParams } from "next/navigation"
++import { buscarHQPorId } from "../../../lib/api"
++import { getIconeEditora, getCorEditora } from "../../../lib/editoras"
++import StarRating from "../../../components/StarRating/StarRating"
++import FavoriteButton from "../../../components/FavoriteButton/FavoriteButton"
++import styles from "./hq.module.css"
++
++// Mesmo "gerador de preço" usado no HQCard, só pra manter o valor igual
++// em todas as telas (já que a Google Books API não retorna preço).
++function gerarPreco(id) {
++  let hash = 0
++  for (let i = 0; i < id.length; i++) {
++    hash = (hash * 31 + id.charCodeAt(i)) % 1000
++  }
++  const preco = 30 + (hash % 50)
++  return preco.toFixed(2)
++}
++
++export default function DetalhesHQ() {
++  const { id } = useParams()
++
++  const [hq, setHq] = useState(null)
++  const [carregando, setCarregando] = useState(true)
++  const [erro, setErro] = useState(false)
++  const [capaComErro, setCapaComErro] = useState(false)
++
++  useEffect(() => {
++    async function carregarHQ() {
++      setCarregando(true)
++      setErro(false)
++
++      try {
++        const resultado = await buscarHQPorId(id)
++        setHq(resultado)
++      } catch {
++        setErro(true)
++      } finally {
++        setCarregando(false)
++      }
++    }
++
++    carregarHQ()
++  }, [id])
++
++  if (carregando) {
++    return <p className={styles.status}>Carregando...</p>
++  }
++
++  if (erro || !hq) {
++    return (
++      <main className={styles.main}>
++        <p className={styles.status}>Não foi possível carregar essa HQ.</p>
++        <Link href="/catalogo" className={styles.voltar}>← Voltar para o catálogo</Link>
++      </main>
++    )
++  }
++
++  const preco = gerarPreco(hq.id)
++  const mostrarCapa = hq.capa && !capaComErro
++
++  return (
++    <main className={styles.main}>
++      <Link href="/catalogo" className={styles.voltar}>← Voltar para o catálogo</Link>
++
++      <div className={styles.conteudo}>
++        <div className={styles.capaWrapper}>
++          {mostrarCapa ? (
++            <img
++              src={hq.capa}
++              alt={hq.titulo}
++              className={styles.capa}
++              onError={() => setCapaComErro(true)}
++            />
++          ) : (
++            <div
++              className={styles.capaFallback}
++              style={{ backgroundColor: getCorEditora(hq.editora) }}
++            >
++              <span className={styles.iconeFallback}>{getIconeEditora(hq.editora)}</span>
++            </div>
++          )}
++        </div>
++
++        <div className={styles.info}>
++          <span className={styles.badge} style={{ backgroundColor: getCorEditora(hq.editora) }}>
++            {hq.editora}
++          </span>
++
++          <h1 className={styles.titulo}>{hq.titulo}</h1>
++          <p className={styles.ano}>{hq.ano}</p>
++
++          <StarRating nota={hq.avaliacao} />
++
++          <p className={styles.sinopse}>{hq.sinopse}</p>
++
++          <div className={styles.acoes}>
++            <span className={styles.preco}>R$ {preco}</span>
++            <FavoriteButton id={hq.id} />
++          </div>
++        </div>
++      </div>
++    </main>
++  )
++}
+diff --git a/components/FavoriteButton/FavoriteButton.js b/components/FavoriteButton/FavoriteButton.js
+new file mode 100644
+index 0000000..14366b5
+--- /dev/null
++++ b/components/FavoriteButton/FavoriteButton.js
+@@ -0,0 +1,40 @@
++"use client"
++
++import { useEffect, useState } from "react"
++import { isFavorito, toggleFavorito } from "../../lib/favoritos"
++import styles from "./FavoriteButton.module.css"
++
++// Botão de favoritar "burro" o suficiente pra funcionar em qualquer página:
++// ele mesmo cuida de ler/gravar o localStorage. Se o componente pai precisar
++// saber quando o favorito muda (ex: a página de Favoritos pra remover o card
++// da tela), basta passar a prop onChange.
++export default function FavoriteButton({ id, onChange }) {
++  const [favorito, setFavorito] = useState(false)
++
++  // Só lemos o localStorage depois que o componente montou no navegador,
++  // pra não dar erro de "window is not defined" no server-side.
++  useEffect(() => {
++    setFavorito(isFavorito(id))
++  }, [id])
++
++  function handleClick(e) {
++    e.preventDefault()
++    const novosFavoritos = toggleFavorito(id)
++    const novoEstado = novosFavoritos.includes(id)
++
++    setFavorito(novoEstado)
++    onChange?.(novoEstado)
++  }
++
++  return (
++    <button
++      type="button"
++      onClick={handleClick}
++      className={`${styles.botao} ${favorito ? styles.ativo : ""}`}
++      aria-label={favorito ? "Remover dos favoritos" : "Adicionar aos favoritos"}
++    >
++      <span className={styles.coracao}>{favorito ? "❤️" : "♡"}</span>
++      <span className={styles.texto}>{favorito ? "Salvo" : "Salvar"}</span>
++    </button>
++  )
++}
+diff --git a/components/FavoriteButton/FavoriteButton.module.css b/components/FavoriteButton/FavoriteButton.module.css
+new file mode 100644
+index 0000000..f72acb8
+--- /dev/null
++++ b/components/FavoriteButton/FavoriteButton.module.css
+@@ -0,0 +1,28 @@
++.botao {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  padding: 10px 18px;
++  border-radius: 8px;
++  border: 1px solid #3a3a3a;
++  background-color: transparent;
++  color: #ffffff;
++  font-size: 14px;
++  font-weight: bold;
++  cursor: pointer;
++  transition: border-color 0.15s ease, color 0.15s ease;
++}
++
++.botao:hover {
++  border-color: var(--color-favorite);
++}
++
++.ativo {
++  border-color: var(--color-favorite);
++  color: var(--color-favorite);
++}
++
++.coracao {
++  font-size: 16px;
++}
+diff --git a/components/HQCard/HQCard.js b/components/HQCard/HQCard.js
+index 7e43787..e8ef6b1 100644
+--- a/components/HQCard/HQCard.js
++++ b/components/HQCard/HQCard.js
+@@ -1,6 +1,8 @@
+ "use client"
+ 
++import { useState } from "react"
+ import Link from "next/link"
++import { getIconeEditora, getCorEditora } from "../../lib/editoras"
+ import styles from "./HQCard.module.css"
+ 
+ function gerarPreco(id) {
+@@ -14,6 +16,8 @@ function gerarPreco(id) {
+ 
+ export default function HQCard({ id, titulo, editora, capa, avaliacao, isFavorito, onFavoritar }) {
+   const preco = gerarPreco(id)
++  const [capaComErro, setCapaComErro] = useState(false)
++  const mostrarCapa = capa && !capaComErro
+ 
+   const badgeClass = {
+     Marvel: styles.marvel,
+@@ -26,7 +30,18 @@ export default function HQCard({ id, titulo, editora, capa, avaliacao, isFavorit
+     <div className={styles.card}>
+       <Link href={`/hq/${id}`} className={styles.link}>
+         <div className={styles.capaWrapper}>
+-          <img src={capa} alt={titulo} className={styles.capa} />
++          {mostrarCapa ? (
++            <img
++              src={capa}
++              alt={titulo}
++              className={styles.capa}
++              onError={() => setCapaComErro(true)}
++            />
++          ) : (
++            <div className={styles.capaFallback} style={{ backgroundColor: getCorEditora(editora) }}>
++              <span className={styles.iconeFallback}>{getIconeEditora(editora)}</span>
++            </div>
++          )}
+           <span className={`${styles.badge} ${badgeClass[editora] || ""}`}>
+             {editora}
+           </span>
+diff --git a/components/HQCard/HQCard.module.css b/components/HQCard/HQCard.module.css
+index 32c61af..da77a06 100644
+--- a/components/HQCard/HQCard.module.css
++++ b/components/HQCard/HQCard.module.css
+@@ -25,6 +25,18 @@
+   object-fit: cover;
+ }
+ 
++.capaFallback {
++  width: 100%;
++  height: 100%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.iconeFallback {
++  font-size: 48px;
++}
++
+ .badge {
+   position: absolute;
+   top: 8px;
+diff --git a/components/StarRating/StarRating.js b/components/StarRating/StarRating.js
+new file mode 100644
+index 0000000..e44c05a
+--- /dev/null
++++ b/components/StarRating/StarRating.js
+@@ -0,0 +1,23 @@
++import styles from "./StarRating.module.css"
++
++// Recebe uma nota de 0 a 5 (a Google Books API manda esse "averageRating")
++// e desenha as estrelinhas. Arredondamos pra baixo pra não ter que lidar
++// com "meia estrela" desenhada.
++export default function StarRating({ nota = 0 }) {
++  const notaArredondada = Math.round(nota)
++  const estrelas = [1, 2, 3, 4, 5]
++
++  return (
++    <div className={styles.container}>
++      {estrelas.map((posicao) => (
++        <span
++          key={posicao}
++          className={posicao <= notaArredondada ? styles.preenchida : styles.vazia}
++        >
++          ★
++        </span>
++      ))}
++      <span className={styles.numero}>{nota.toFixed(1)}</span>
++    </div>
++  )
++}
+diff --git a/components/StarRating/StarRating.module.css b/components/StarRating/StarRating.module.css
+new file mode 100644
+index 0000000..5de871a
+--- /dev/null
++++ b/components/StarRating/StarRating.module.css
+@@ -0,0 +1,20 @@
++.container {
++  display: flex;
++  align-items: center;
++  gap: 2px;
++  font-size: 18px;
++}
++
++.preenchida {
++  color: #f5c518;
++}
++
++.vazia {
++  color: #555555;
++}
++
++.numero {
++  margin-left: 6px;
++  font-size: 14px;
++  color: #aaaaaa;
++}
+diff --git a/lib/editoras.js b/lib/editoras.js
+new file mode 100644
+index 0000000..8c24837
+--- /dev/null
++++ b/lib/editoras.js
+@@ -0,0 +1,25 @@
++// A Google Books API nem sempre devolve uma capa (imageLinks.thumbnail vazio).
++// Nesses casos a gente cai num "placeholder" temático por editora, parecido
++// com o que tinha no mockup (escudo, raio, espada, etc).
++
++export const iconePorEditora = {
++  Marvel: "🛡️",
++  DC: "⚡",
++  Bandai: "⚔️",
++  Capcom: "🔥",
++}
++
++export const corPorEditora = {
++  Marvel: "var(--color-marvel)",
++  DC: "var(--color-dc)",
++  Bandai: "var(--color-bandai)",
++  Capcom: "var(--color-capcom)",
++}
++
++export function getIconeEditora(editora) {
++  return iconePorEditora[editora] || "📕"
++}
++
++export function getCorEditora(editora) {
++  return corPorEditora[editora] || "#555555"
++}
+diff --git a/lib/favoritos.js b/lib/favoritos.js
+new file mode 100644
+index 0000000..ed58dcc
+--- /dev/null
++++ b/lib/favoritos.js
+@@ -0,0 +1,28 @@
++// Como o catálogo, a página de detalhes e a página de favoritos são páginas
++// diferentes (sem um estado global tipo Context), salvamos a lista de IDs
++// favoritados no localStorage do navegador. Assim qualquer página consegue
++// ler/atualizar a mesma lista.
++
++const STORAGE_KEY = "mangaka_favoritos"
++
++export function getFavoritos() {
++  if (typeof window === "undefined") return []
++
++  const salvos = localStorage.getItem(STORAGE_KEY)
++  return salvos ? JSON.parse(salvos) : []
++}
++
++export function isFavorito(id) {
++  return getFavoritos().includes(id)
++}
++
++export function toggleFavorito(id) {
++  const favoritos = getFavoritos()
++
++  const novosFavoritos = favoritos.includes(id)
++    ? favoritos.filter((favoritoId) => favoritoId !== id)
++    : [...favoritos, id]
++
++  localStorage.setItem(STORAGE_KEY, JSON.stringify(novosFavoritos))
++  return novosFavoritos
++}
+-- 
+2.43.0
+

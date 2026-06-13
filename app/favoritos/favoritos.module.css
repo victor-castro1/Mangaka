@@ -1,0 +1,39 @@
+.main {
+  padding: 32px;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: bold;
+  margin-bottom: 24px;
+}
+
+.status {
+  color: #aaaaaa;
+  font-size: 16px;
+  text-align: center;
+  padding: 48px 0;
+}
+
+.link {
+  color: var(--color-favorite);
+  text-decoration: underline;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

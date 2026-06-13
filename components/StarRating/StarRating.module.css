@@ -1,0 +1,20 @@
+.container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 18px;
+}
+
+.preenchida {
+  color: #f5c518;
+}
+
+.vazia {
+  color: #555555;
+}
+
+.numero {
+  margin-left: 6px;
+  font-size: 14px;
+  color: #aaaaaa;
+}
