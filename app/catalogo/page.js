@@ -5,6 +5,7 @@ import SearchBar from "../../components/SearchBar/SearchBar"
 import FilterBar from "../../components/FilterBar/FilterBar"
 import HQCard from "../../components/HQCard/HQCard"
 import { buscarHQsPorEditora } from "../../lib/api"
+import { getFavoritos, toggleFavorito } from "../../lib/favoritos"
 import styles from "./catalogo.module.css"
 
 export default function Catalogo() {
@@ -13,6 +14,11 @@ export default function Catalogo() {
     const [filtroAtivo, setFiltroAtivo] = useState("Todos")
     const [favoritos, setFavoritos] = useState([])
     const [carregando, setCarregando] = useState(true)
+
+    // Carrega os favoritos salvos no navegador (sincroniza com a página /favoritos)
+    useEffect(() => {
+        setFavoritos(getFavoritos())
+    }, [])
 
     useEffect(() => {
         async function carregarHQs() {
@@ -29,9 +35,8 @@ export default function Catalogo() {
     }, [filtroAtivo])
 
     function handleFavoritar(id) {
-        setFavoritos((prev) =>
-            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-        )
+        const novosFavoritos = toggleFavorito(id)
+        setFavoritos(novosFavoritos)
     }
 
     const hqsFiltradas = hqs.filter((hq) =>

@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
+import { getIconeEditora, getCorEditora } from "../../lib/editoras"
 import styles from "./HQCard.module.css"
 
 function gerarPreco(id) {
@@ -14,6 +16,8 @@ function gerarPreco(id) {
 
 export default function HQCard({ id, titulo, editora, capa, avaliacao, isFavorito, onFavoritar }) {
   const preco = gerarPreco(id)
+  const [capaComErro, setCapaComErro] = useState(false)
+  const mostrarCapa = capa && !capaComErro
 
   const badgeClass = {
     Marvel: styles.marvel,
@@ -26,7 +30,18 @@ export default function HQCard({ id, titulo, editora, capa, avaliacao, isFavorit
     <div className={styles.card}>
       <Link href={`/hq/${id}`} className={styles.link}>
         <div className={styles.capaWrapper}>
-          <img src={capa} alt={titulo} className={styles.capa} />
+          {mostrarCapa ? (
+            <img
+              src={capa}
+              alt={titulo}
+              className={styles.capa}
+              onError={() => setCapaComErro(true)}
+            />
+          ) : (
+            <div className={styles.capaFallback} style={{ backgroundColor: getCorEditora(editora) }}>
+              <span className={styles.iconeFallback}>{getIconeEditora(editora)}</span>
+            </div>
+          )}
           <span className={`${styles.badge} ${badgeClass[editora] || ""}`}>
             {editora}
           </span>
